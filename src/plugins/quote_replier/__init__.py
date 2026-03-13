@@ -40,7 +40,9 @@ except Exception as e:
     exit(1)
 max_concurrent_tasks = max(1, config.max_concurrent_tasks)
 ocr_engine = RapidOCR()
-llm_selector = LLMSelector(config.zhipu_api_key_file, config.llm_model, config.llm_temperature, config.meme_for_llm)
+llm_selector = LLMSelector(
+    config.api_key_file, config.llm_model, config.llm_base_url, config.llm_temperature, config.meme_for_llm
+)
 
 
 help_cmd = on_command("help", aliases={"帮助"}, rule=to_me())
@@ -48,6 +50,11 @@ upload_cmd = on_command("upload", aliases={"上传"}, rule=to_me())
 list_cmd = on_command("list", aliases={"列表"}, rule=to_me())
 delete_cmd = on_command("delete", aliases={"删除"}, rule=to_me())
 comment_cmd = on_command("comment", aliases={"评论"}, rule=to_me())
+
+
+@help_cmd.handle()
+async def handle_help():
+    await help_cmd.finish(str(__plugin_meta__.usage))
 
 
 def _get_image_urls(message: Message):
@@ -96,12 +103,6 @@ async def _process_upload_image(url: str, image_file_path: str, group_id: int, u
 
     await asyncio.to_thread(quote_db.add_quote, group_id, user_id, message_id, image_file_path, image_text)
     return True
-
-
-@help_cmd.handle()
-async def handle_help():
-    await help_cmd.finish(str(__plugin_meta__.usage))
-
 
 @upload_cmd.handle()
 async def handle_upload(event: GroupMessageEvent):

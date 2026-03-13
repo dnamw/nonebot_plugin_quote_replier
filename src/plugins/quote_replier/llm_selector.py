@@ -7,9 +7,11 @@ from .database import QuoteRecord
 
 
 class LLMSelector:
-    def __init__(self, api_key_file: str, model: str, temperature: float, memes: dict[str, str]):
+
+    def __init__(self, api_key_file: str, model: str, llm_base_url: str, temperature: float, memes: dict[str, str]):
         self.api_key = self._get_api_key(api_key_file)
         self.model = model
+        self.llm_base_url = llm_base_url
         self.temperature = temperature
         self.memes = memes
 
@@ -18,7 +20,7 @@ class LLMSelector:
             with open(file_path, "r") as f:
                 return f.readline().strip()
         except Exception as e:
-            logger.error(f"Failed to read Zhipu API key: {e}")
+            logger.error(f"Failed to read API key: {e}")
             raise
 
     def _build_prompt(self, query_text: str, candidate_records: list[QuoteRecord]):
@@ -46,11 +48,11 @@ class LLMSelector:
 
         client = OpenAI(
             api_key=self.api_key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            base_url=self.llm_base_url,
         )
         messages = self._build_prompt(query_text, candidate_records)
         completion = client.chat.completions.create(
-            model="qwen-plus-2025-07-28",  # 模型列表: https://help.aliyun.com/model-studio/getting-started/models
+            model=self.model,
             messages=messages,
             temperature=self.temperature,
         )

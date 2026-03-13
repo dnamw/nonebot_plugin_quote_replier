@@ -18,13 +18,17 @@ class Config(BaseModel):
         default=5,
         description="Number of items to display per page in the list command.",
     )
-    zhipu_api_key_file: str = Field(
-        default="secrets/zhipu_api_key.txt",
-        description="File path storing Zhipu API key, first line only.",
+    api_key_file: str = Field(
+        default="secrets/api_key.txt",
+        description="File path storing API key, first line only.",
     )
     llm_model: str = Field(
-        default="glm-4.7-flash",
-        description="Zhipu model name for selecting best OCR match.",
+        default="qwen-plus-2025-07-28",
+        description="LLM model to use for selecting the best matching quote. Ensure this model is compatible with the Qwen API.",
+    )
+    llm_base_url: str = Field(
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        description="Base URL for the LLM API. Adjust if using a different provider or endpoint.",
     )
     llm_temperature: float = Field(
         default=0.2,
@@ -35,6 +39,7 @@ class Config(BaseModel):
             "bt": "变态",
             "旮旯给木": "galgame，一种以恋爱为主题的游戏类型",
             "xyy": "性压抑，表面某人在某件事上对性表现出强烈的欲望",
+            "诗人": "是人的谐音，质疑对方是不是人类",
         },
         description="A dictionary of meme phrases to help LLM understand user queries.",
     )
