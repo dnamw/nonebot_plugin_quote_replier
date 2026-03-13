@@ -19,7 +19,7 @@ class Config(BaseModel):
         description="Number of items to display per page in the list command.",
     )
     zhipu_api_key_file: str = Field(
-        default="secrets/zhipu_api_key.txt",
+        default="secrets/api_key.txt",
         description="File path storing Zhipu API key, first line only.",
     )
     llm_model: str = Field(
