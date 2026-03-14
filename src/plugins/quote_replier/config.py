@@ -31,7 +31,7 @@ class Config(BaseModel):
         description="Base URL for the LLM API. Adjust if using a different provider or endpoint.",
     )
     llm_temperature: float = Field(
-        default=0.2,
+        default=1.0,
         description="Temperature for LLM selection requests.",
     )
     meme_for_llm: dict[str, str] = Field(
@@ -40,6 +40,9 @@ class Config(BaseModel):
             "旮旯给木": "galgame，一种以恋爱为主题的游戏类型",
             "xyy": "性压抑，表面某人在某件事上对性表现出强烈的欲望",
             "诗人": "是人的谐音，质疑对方是不是人类",
+            "fw": "废物的缩写",
+            "hyw": "何意味的缩写，意为“什么意思”，用于表达困惑、不解或轻微嘲讽。",
+            "你牛大了": "你牛逼大发了的缩写，通常用于调侃或讽刺对方自夸或吹嘘自己的能力。",
         },
         description="A dictionary of meme phrases to help LLM understand user queries.",
     )

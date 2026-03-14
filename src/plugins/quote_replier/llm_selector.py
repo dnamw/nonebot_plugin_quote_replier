@@ -26,9 +26,8 @@ class LLMSelector:
     def _build_prompt(self, query_text: str, candidate_records: list[QuoteRecord]):
         prompts = [
             "你是一个群聊消息回复器。",
-            "任务：根据用户要回复的消息，在候选文本中选择最适合用于回复的一条。",
-            "请只从候选 ID 中选择一个，或在都不合适时返回 null。",
-            "输出必须是 ID（一个整数）或者null。",
+            "任务：根据用户的消息，在候选文本中选择最适合用于回复的一条。输出必须是候选文本的ID（一个整数）。",
+            "注意：候选文本的开头可能会有一些人名，这是OCR识别的结果，不是文本的一部分。",
             "以下是一些可能出现在候选文本或用户消息中的一些梗（meme），用来帮助你理解：",
             "\n".join(f"{k}: {v}" for k, v in self.memes.items()),
             f"用户消息: {query_text}",
@@ -50,10 +49,10 @@ class LLMSelector:
             api_key=self.api_key,
             base_url=self.llm_base_url,
         )
-        messages = self._build_prompt(query_text, candidate_records)
+        prompts = self._build_prompt(query_text, candidate_records)
         completion = client.chat.completions.create(
             model=self.model,
-            messages=messages,
+            messages=prompts,
             temperature=self.temperature,
         )
 

@@ -94,10 +94,11 @@ async def download_image(url: str, save_path: str):
 
 async def extract_image_text(image_file_path: str):
     try:
-        ocr_result = await asyncio.to_thread(ocr_engine, image_file_path)
+        ocr_result = ocr_engine(image_file_path)
         if not ocr_result or len(ocr_result) < 2 or not ocr_result[0]:
             return ""
-        image_text = ocr_result[0][-1][1]
+        # 处理OCR识别结果
+        image_text = "".join(item[1] for item in ocr_result[0][2:])  # 从第三行开始拼接文本，跳过可能的标题行
         return image_text.strip() if isinstance(image_text, str) else ""
     except Exception as e:
         logger.exception(f"Exception occurred while OCR image {image_file_path}: {e}")
