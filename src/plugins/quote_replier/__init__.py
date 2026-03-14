@@ -8,6 +8,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import to_me
 from nonebot.exception import MatcherException
 
+import os
 import math
 import asyncio
 import tempfile
@@ -23,33 +24,44 @@ from .llm_selector import LLMSelector
 __plugin_meta__ = PluginMetadata(
     name="Quote Replier",
     description="A plugin to reply by an image to quoted messages in group chats.",
-    usage="@机器人并发送 /help 或 /帮助查看帮助；"
-    "引用图片并@机器人发送 /upload 或 /上传 入库；"
-    "@机器人发送 /list 或 /列表 [页码] 查看图库；"
-    "回复机器人发出的图片并@机器人发送 /delete 或 /删除 删除；"
-    "引用消息并@机器人发送 /评论 或 /comment 进行回复文字图。",
+    usage="@机器人并发送 /help 或 /帮助查看帮助\n"
+    "引用图片并发送 /upload 或 /上传 入库\n"
+    "发送 /list 或 /列表 [页码] 查看图库\n"
+    "回复机器人发出的图片并发送 /delete 或 /删除 删除\n"
+    "引用消息并发送 /评论 或 /comment 进行回复文字图",
     config=Config,
 )
 
-config = get_plugin_config(Config)
+plugin_config = get_plugin_config(Config)
+
+max_concurrent_tasks = max(1, plugin_config.max_concurrent_tasks)
+ocr_engine = RapidOCR()
+
 try:
-    quote_db = QuoteDatabase(config.database_path, config.image_path)
+    quote_db = QuoteDatabase(plugin_config.database_path, plugin_config.image_path)
     quote_db.init_database()
 except Exception as e:
     logger.error(f"Failed to initialize QuoteDatabase: {e}")
     exit(1)
-max_concurrent_tasks = max(1, config.max_concurrent_tasks)
-ocr_engine = RapidOCR()
-llm_selector = LLMSelector(
-    config.api_key_file, config.llm_model, config.llm_base_url, config.llm_temperature, config.meme_for_llm
+
+selector = LLMSelector(
+    plugin_config.api_key_file,
+    plugin_config.llm_model,
+    plugin_config.llm_base_url,
+    plugin_config.llm_temperature,
+    plugin_config.meme_for_llm,
 )
 
 
-help_cmd = on_command("help", aliases={"帮助"}, rule=to_me())
-upload_cmd = on_command("upload", aliases={"上传"}, rule=to_me())
-list_cmd = on_command("list", aliases={"列表"}, rule=to_me())
-delete_cmd = on_command("delete", aliases={"删除"}, rule=to_me())
-comment_cmd = on_command("comment", aliases={"评论"}, rule=to_me())
+async def is_group_message(event: GroupMessageEvent) -> bool:
+    return isinstance(event, GroupMessageEvent)
+
+
+help_cmd = on_command("help", aliases={"帮助"}, rule=to_me() & is_group_message)
+upload_cmd = on_command("upload", aliases={"上传"}, rule=is_group_message)
+list_cmd = on_command("list", aliases={"列表"}, rule=is_group_message)
+delete_cmd = on_command("delete", aliases={"删除"}, rule=is_group_message)
+comment_cmd = on_command("comment", aliases={"评论"}, rule=is_group_message)
 
 
 @help_cmd.handle()
@@ -57,7 +69,7 @@ async def handle_help():
     await help_cmd.finish(str(__plugin_meta__.usage))
 
 
-def _get_image_urls(message: Message):
+def get_image_urls(message: Message):
     image_urls = []
     for segment in message:
         if segment.type == "image":
@@ -67,7 +79,7 @@ def _get_image_urls(message: Message):
     return image_urls
 
 
-async def _download_image(url: str, save_path: str):
+async def download_image(url: str, save_path: str):
     try:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         async with httpx.AsyncClient() as client:
@@ -80,7 +92,7 @@ async def _download_image(url: str, save_path: str):
         return False
 
 
-async def _extract_image_text(image_file_path: str):
+async def extract_image_text(image_file_path: str):
     try:
         ocr_result = await asyncio.to_thread(ocr_engine, image_file_path)
         if not ocr_result or len(ocr_result) < 2 or not ocr_result[0]:
@@ -93,23 +105,25 @@ async def _extract_image_text(image_file_path: str):
 
 
 async def _process_upload_image(url: str, image_file_path: str, group_id: int, user_id: int, message_id: int):
-    downloaded = await _download_image(url, image_file_path)
+    downloaded = await download_image(url, image_file_path)
     if not downloaded:
         return False
 
-    image_text = await _extract_image_text(image_file_path)
+    image_text = await extract_image_text(image_file_path)
     if not image_text:
+        os.remove(image_file_path)
         return False
 
     await asyncio.to_thread(quote_db.add_quote, group_id, user_id, message_id, image_file_path, image_text)
     return True
+
 
 @upload_cmd.handle()
 async def handle_upload(event: GroupMessageEvent):
     if event is None or event.reply is None:
         await upload_cmd.finish("请先引用一条图片消息，再@我发送 /upload 或 /上传。")
 
-    image_urls = _get_image_urls(event.reply.message)
+    image_urls = get_image_urls(event.reply.message)
     if not image_urls:
         await upload_cmd.finish("引用消息里没有图片，请换一条消息再试。")
 
@@ -122,7 +136,7 @@ async def handle_upload(event: GroupMessageEvent):
             return await _process_upload_image(url, image_file_path, event.group_id, event.user_id, event.message_id)
 
     for idx, url in enumerate(image_urls):
-        image_file_path = f"{config.image_path}/{event.group_id}/{event.message_id}_{idx}.jpg"
+        image_file_path = f"{plugin_config.image_path}/{event.group_id}/{event.message_id}_{idx}.jpg"
         tasks.append(_run_bounded(url, image_file_path))
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -152,7 +166,7 @@ async def handle_list(event: GroupMessageEvent, args: Message = CommandArg()):
     if total <= 0:
         await list_cmd.finish("本群还没有收录任何图片，快上传第一张吧！")
 
-    page_size = max(1, config.list_page_size)
+    page_size = max(1, plugin_config.list_page_size)
     total_pages = math.ceil(total / page_size)
     if page > total_pages:
         await list_cmd.finish(f"页码超出范围，当前最大页码为 {total_pages}。")
@@ -167,10 +181,9 @@ async def handle_list(event: GroupMessageEvent, args: Message = CommandArg()):
         with open(record.image_path, "rb") as f:
             image_bytes: bytes = f.read()
         if not image_bytes:
-            raise Exception(f"Failed to read image file: {record.image_path}")
-        message = Message(
-            [MessageSegment.text(f"[{start_index + offset}] ID={record.id}\n"), MessageSegment.image(image_bytes)]
-        )
+            logger.error(f"Failed to read image file: {record.image_path}")
+            continue
+        message = Message([MessageSegment.text(f"[{start_index + offset}]\n"), MessageSegment.image(image_bytes)])
         await list_cmd.send(message)
 
     if page < total_pages:
@@ -178,11 +191,11 @@ async def handle_list(event: GroupMessageEvent, args: Message = CommandArg()):
 
 
 async def _process_delete_image(url: str, temp_file_path: str, group_id: int) -> list[int]:
-    downloaded = await _download_image(url, temp_file_path)
+    downloaded = await download_image(url, temp_file_path)
     if not downloaded:
         return []
 
-    image_text = await _extract_image_text(temp_file_path)
+    image_text = await extract_image_text(temp_file_path)
     if not image_text:
         return []
 
@@ -195,12 +208,12 @@ async def handle_delete(event: GroupMessageEvent):
     if event is None or event.reply is None:
         await delete_cmd.finish("请引用图片消息，再@我发送 /delete 或 /删除。")
 
-    image_urls = _get_image_urls(event.reply.message)
+    image_urls = get_image_urls(event.reply.message)
     if not image_urls:
         await upload_cmd.finish("引用消息里没有图片，请换一条消息再试。")
 
     tasks = []
-    max_concurrency = min(max_concurrent_tasks, len(image_urls))
+    max_concurrency = min(plugin_config.max_concurrent_tasks, len(image_urls))
     semaphore = asyncio.Semaphore(max_concurrency)
 
     async def _run_bounded(url: str, temp_file_path: str) -> list[int]:
@@ -239,13 +252,14 @@ async def handle_comment(event: GroupMessageEvent):
         await comment_cmd.finish("本群还没有收录任何图片，快上传第一张吧！")
 
     try:
-        best_record = await llm_selector.select_best_match(query_text, candidate_records)
+        best_record = await selector.select_best_match(query_text, candidate_records)
         if best_record is None:
             await comment_cmd.finish("未找到合适的图片进行回复。")
         with open(best_record.image_path, "rb") as f:
             image_bytes: bytes = f.read()
         if not image_bytes:
-            raise Exception(f"Failed to read image file: {best_record.image_path}")
+            logger.error(f"Failed to read image file: {best_record.image_path}")
+            await comment_cmd.finish("无法读取图片文件。")
         message = Message([MessageSegment.image(image_bytes)])
         await comment_cmd.finish(message)
     except MatcherException:
