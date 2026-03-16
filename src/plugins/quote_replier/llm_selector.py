@@ -2,7 +2,6 @@ from nonebot.log import logger
 
 from openai import OpenAI
 
-from .config import Config
 from .database import QuoteRecord
 
 
@@ -25,9 +24,11 @@ class LLMSelector:
 
     def _build_prompt(self, query_text: str, candidate_records: list[QuoteRecord]):
         prompts = [
-            "你是一个群聊消息回复器。",
-            "任务：根据用户的消息，在候选文本中选择最适合用于回复的一条。输出必须是候选文本的ID（一个整数）。",
-            "注意：候选文本的开头可能会有一些人名，这是OCR识别的结果，不是文本的一部分。",
+            "你是一个群聊消息评论器。",
+            "任务：根据用户的消息，在候选文本中选择一条，用来评价用户消息。",
+            "你的评价风格应该是偏吐槽的，请选择你认为**最适合**的**一条**候选文本。",
+            "输出格式：仅输出被选中文本的ID（一个整数）。",
+            "注意：候选文本的开头可能会有一些群头衔，或者人名，这是OCR识别的结果，不是文本的一部分。",
             "以下是一些可能出现在候选文本或用户消息中的一些梗（meme），用来帮助你理解：",
             "\n".join(f"{k}: {v}" for k, v in self.memes.items()),
             f"用户消息: {query_text}",
@@ -55,9 +56,11 @@ class LLMSelector:
             messages=prompts,
             temperature=self.temperature,
         )
-
-        if completion.choices[0].message.content == "null":
-            return None
+        try:
+            selected_id = int(completion.choices[0].message.content.strip())
+        except ValueError:
+            logger.error("Failed to parse LLM response as an integer.")
+            raise
         for record in candidate_records:
-            if str(record.id) == completion.choices[0].message.content.strip():
+            if record.id == selected_id:
                 return record

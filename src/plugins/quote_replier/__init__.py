@@ -98,7 +98,7 @@ async def extract_image_text(image_file_path: str):
         if not ocr_result or len(ocr_result) < 2 or not ocr_result[0]:
             return ""
         # 处理OCR识别结果
-        image_text = "".join(item[1] for item in ocr_result[0][2:])  # 从第三行开始拼接文本，跳过可能的标题行
+        image_text = "".join(item[1] for item in ocr_result[0])  # 从第一行开始拼接文本，跳过可能的标题行
         return image_text.strip() if isinstance(image_text, str) else ""
     except Exception as e:
         logger.exception(f"Exception occurred while OCR image {image_file_path}: {e}")
@@ -122,7 +122,7 @@ async def _process_upload_image(url: str, image_file_path: str, group_id: int, u
 @upload_cmd.handle()
 async def handle_upload(event: GroupMessageEvent):
     if event is None or event.reply is None:
-        await upload_cmd.finish("请先引用一条图片消息，再@我发送 /upload 或 /上传。")
+        await upload_cmd.finish("请先引用一条图片消息，再发送 /upload 或 /上传。")
 
     image_urls = get_image_urls(event.reply.message)
     if not image_urls:
@@ -207,7 +207,7 @@ async def _process_delete_image(url: str, temp_file_path: str, group_id: int) ->
 @delete_cmd.handle()
 async def handle_delete(event: GroupMessageEvent):
     if event is None or event.reply is None:
-        await delete_cmd.finish("请引用图片消息，再@我发送 /delete 或 /删除。")
+        await delete_cmd.finish("请引用图片消息，再发送 /delete 或 /删除。")
 
     image_urls = get_image_urls(event.reply.message)
     if not image_urls:
@@ -242,7 +242,7 @@ async def handle_delete(event: GroupMessageEvent):
 @comment_cmd.handle()
 async def handle_comment(event: GroupMessageEvent):
     if event is None or event.reply is None:
-        await comment_cmd.finish("请先引用一条消息，再@我发送 /comment 或 /评论。")
+        await comment_cmd.finish("请先引用一条消息，再发送 /comment 或 /评论。")
 
     query_text = event.reply.message.extract_plain_text().strip()
     if not query_text:
